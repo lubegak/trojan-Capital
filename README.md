@@ -236,3 +236,46 @@ tabs.forEach(t => t.addEventListener('click', () => {
 document.addEventListener('keydown', e => { if (e.key === 'Escape') modal?.classList.remove('open'); });
 navToggle?.addEventListener('click', () => nav.classList.toggle('mobile-open'));
 nav?.querySelectorAll('a').forEach(a => a.addEventListener('click', () => nav.classList.remove('mobile-open')));
+
+<?php
+session_start();
+require_once __DIR__.'/db.php';
+if (!$pdo) exit('Database is not configured yet.');
+verify_csrf();
+
+$action = $_POST['action'] ?? '';
+$email = strtolower(trim($_POST['email'] ?? ''));
+$password = $_POST['password'] ?? '';
+
+if (!filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($password) < 8) exit('Please provide valid account details.');
+
+if ($action === 'register') {
+    $name = trim($_POST['name'] ?? '');
+    if (strlen($name) < 2) exit('Please enter your full name.');
+    $stmt = $pdo->prepare("SELECT id FROM users WHERE email=?");
+    $stmt->execute([$email]);
+    if ($stmt->fetch()) exit('An account with this email already exists.');
+    $hash = password_hash($password, PASSWORD_DEFAULT);
+    $stmt = $pdo->prepare("INSERT INTO users (name,email,password_hash) VALUES (?,?,?)");
+    $stmt->execute([$name,$email,$hash]);
+    $_SESSION['user'] = ['id'=>$pdo->lastInsertId(),'name'=>$name,'email'=>$email,'is_admin'=>0];
+    header('Location: index.php#contact'); exit;
+}
+
+if ($action === 'login') {
+    $stmt = $pdo->prepare("SELECT id,name,email,password_hash,is_admin FROM users WHERE email=?");
+    $stmt->execute([$email]);
+    $u = $stmt->fetch();
+    if (!$u || !password_verify($password, $u['password_hash'])) exit('Incorrect email or password.');
+    session_regenerate_id(true);
+    $_SESSION['user'] = ['id'=>$u['id'],'name'=>$u['name'],'email'=>$u['email'],'is_admin'=>(int)$u['is_admin']];
+    header('Location: index.php'); exit;
+}
+exit('Invalid action.');
+
+<?php
+session_start();
+session_unset();
+session_destroy();
+header('Location: index.php');
+exit;
